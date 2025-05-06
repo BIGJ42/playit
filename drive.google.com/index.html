@@ -72,7 +72,7 @@
     const favoritesList = document.getElementById("favoritesList");
 
     function loadSongsFromGitHub() {
-      fetch("https://api.github.com/repos/YOUR_USERNAME/YOUR_REPO/contents/music")
+      fetch("https://api.github.com/repos/bigj42/playit/contents/drive.google.com/music")
         .then(res => res.json())
         .then(data => {
           songs = data.filter(file => file.name.endsWith(".mp3"))
