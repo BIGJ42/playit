@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fluid Music Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-accent: hsla(210, 80%, 60%, 1);
+      --primary-accent-hover: hsla(210, 80%, 70%, 1);
+      --text-primary: #f0f0f0;
+      --text-secondary: #b0b0b0;
+      --text-tertiary: #888;
+      --bg-dark: #121212;
+      --bg-glass: rgba(255, 255, 255, 0.08);
+      --bg-glass-hover: rgba(255, 255, 255, 0.15);
+      --border-glass: rgba(255, 255, 255, 0.12);
+      --shadow-light: rgba(0, 0, 0, 0.2);
+      --shadow-medium: rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #232526 0%, #414345 100%);
+      color: var(--text-primary);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      overflow-x: hidden; /* Prevent horizontal scroll on small screens if container is too wide */
+    }
+
+    .music-player-container {
+      background: var(--bg-glass);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px); /* Safari support */
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
+      padding: 25px 30px;
+      box-shadow: 0 8px 32px 0 var(--shadow-medium);
+      width: 100%;
+      max-width: 550px; /* Slightly narrower for a sleeker look */
+      transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+    }
+
+    .music-player-container:hover {
+        /* Optional: subtle lift on hover */
+        /* transform: translateY(-5px); */
+        /* box-shadow: 0 12px 40px 0 var(--shadow-medium); */
+    }
+
+    h1 {
+      text-align: center;
+      font-weight: 700;
+      font-size: 2.2em;
+      margin-bottom: 25px;
+      color: var(--text-primary);
+      text-shadow: 1px 1px 3px var(--shadow-light);
+    }
+
+    #now-playing {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 1.1em;
+      color: var(--text-secondary);
+      font-weight: 500;
+      min-height: 1.5em; /* Prevent layout shift when no song is playing */
+    }
+    #now-playing span {
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+
+    .playlist {
+      list-style: none;
+      padding: 0;
+      max-height: 300px; /* Limit height and make scrollable */
+      overflow-y: auto;
+      margin-bottom: 25px;
+      /* Custom Scrollbar */
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary-accent) var(--bg-glass);
+    }
+
+    .playlist::-webkit-scrollbar {
+      width: 8px;
+    }
+    .playlist::-webkit-scrollbar-track {
+      background: var(--bg-glass);
+      border-radius: 10px;
+    }
+    .playlist::-webkit-scrollbar-thumb {
+      background-color: var(--primary-accent);
+      border-radius: 10px;
+      border: 2px solid var(--bg-glass);
+    }
+
+
+    .track-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      margin-bottom: 8px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out, transform 0.1s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .track-item:hover {
+      background: var(--bg-glass-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px var(--shadow-light);
+    }
+
+    .track-item.active {
+      background: var(--primary-accent);
+      color: white; /* Ensure text is readable on active background */
+      box-shadow: 0 4px 20px hsla(210, 80%, 60%, 0.4);
+    }
+    .track-item.active .favorite-btn {
+        color: gold; /* Keep favorited consistent */
+    }
+    .track-item.active .favorite-btn.favorited {
+        color: white; /* Or another contrasting color for active favorited */
+        text-shadow: 0 0 5px gold;
+    }
+     .track-item.active .track-info {
+        color: white;
+    }
+
+
+    .track-info {
+      flex-grow: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-weight: 500;
+      padding-right: 10px;
+      color: var(--text-secondary);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .favorite-btn {
+      background: none;
+      border: none;
+      color: var(--text-tertiary);
+      font-size: 1.3em;
+      cursor: pointer;
+      transition: color 0.2s, transform 0.2s;
+      padding: 5px; /* Easier to click */
+    }
+
+    .favorite-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .favorite-btn.favorited {
+      color: gold;
+    }
+
+    .player-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px; /* Space between buttons and seekbar */
+    }
+
+    .controls-buttons {
+        display: flex;
+        align-items: center;
+        gap: 20px; /* Space between play/pause and future prev/next buttons */
+    }
+
+    #play-pause-btn {
+      font-size: 1.8em; /* Slightly smaller icon for a circular button */
+      background: var(--primary-accent);
+      border: none;
+      color: white;
+      cursor: pointer;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background 0.2s ease-in-out, transform 0.1s ease-in-out, box-shadow 0.2s ease-in-out;
+      box-shadow: 0 4px 10px hsla(210, 80%, 60%, 0.3);
+    }
+
+    #play-pause-btn:hover {
+      background: var(--primary-accent-hover);
+      transform: scale(1.05);
+      box-shadow: 0 6px 15px hsla(210, 80%, 60%, 0.4);
+    }
+    #play-pause-btn:active {
+        transform: scale(0.95);
+    }
+
+
+    #seek-bar {
+      width: 100%; /* Full width within its container */
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--bg-glass);
+      border-radius: 5px;
+      cursor: pointer;
+      outline: none;
+      border: 1px solid var(--border-glass);
+    }
+
+    #seek-bar::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--primary-accent);
+      border-radius: 50%;
+      border: 2px solid white; /* White border for better visibility */
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #seek-bar::-webkit-slider-thumb:hover {
+        background: var(--primary-accent-hover);
+    }
+
+    #seek-bar::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--primary-accent);
+      border-radius: 50%;
+      border: 2px solid white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #seek-bar::-moz-range-thumb:hover {
+        background: var(--primary-accent-hover);
+    }
+
+
+    .time-display {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      font-size: 0.9em;
+      color: var(--text-secondary);
+      margin-top: -5px; /* Pull it closer to the seek bar */
+    }
+
+    .initial-message,
+    .error-message {
+      text-align: center;
+      color: var(--text-tertiary);
+      padding: 20px;
+      font-style: italic;
+    }
+
+    /* Optional: Add a bit more visual flair to inputs on focus */
+    input[type="range"]:focus-visible::-webkit-slider-thumb {
+      box-shadow: 0 0 0 3px hsla(210, 80%, 60%, 0.5);
+    }
+    input[type="range"]:focus-visible::-moz-range-thumb {
+      box-shadow: 0 0 0 3px hsla(210, 80%, 60%, 0.5);
+    }
+    button:focus-visible {
+      outline: 2px solid var(--primary-accent);
+      outline-offset: 2px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="music-player-container">
+    <h1>Music</h1>
+    <div id="now-playing">Now Playing: <span>None</span></div>
+    <ul class="playlist"><li class="initial-message">Loading music...</li></ul>
+
+    <div class="player-controls">
+      <input type="range" id="seek-bar" value="0" min="0" max="100">
+      <div class="time-display">
+        <span id="current-time">0:00</span>
+        <span id="total-duration">0:00</span>
+      </div>
+      <div class="controls-buttons">
+          <!-- Placeholder for prev/next buttons if you add them later -->
+          <!-- <button id="prev-btn">⏪</button> -->
+          <button id="play-pause-btn">▶️</button>
+          <!-- <button id="next-btn">⏩</button> -->
+      </div>
+    </div>
+  </div>
+
+  <audio id="audioPlayer"></audio>
+
+  <script>
+    const playlistEl = document.querySelector('.playlist');
+    const nowPlayingEl = document.getElementById('now-playing').querySelector('span');
+    const audio = document.getElementById('audioPlayer');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const seekBar = document.getElementById('seek-bar');
+    const currentTimeDisplay = document.getElementById('current-time');
+    const totalDurationDisplay = document.getElementById('total-duration');
+
+    let currentTrackIndex = -1;
+    let tracks = [];
+    let favorites = new Set(JSON.parse(localStorage.getItem('favorites') || '[]'));
+
+    async function loadMusicFiles() {
+      try {
+        // In a real scenario, you'd fetch from an API or have a predefined list.
+        // For this demo, using a hardcoded list or fetching from a local 'music' folder.
+        // Make sure you have a 'music' folder with some .mp3 files in the same directory as your HTML file.
+        // Or, replace this with your actual music source.
+        const hardcodedTracks = [
+          // Add some dummy track names for testing if you don't have a /music/ endpoint
+          // "Song Title 1.mp3",
+          // "Another Cool Song.mp3",
+          // "My Favorite Tune.mp3"
+        ];
+
+        // Attempt to fetch from /music/ directory listing (if your server supports it)
+        let fetchedTracks = [];
+        try {
+            const res = await fetch('./music/'); // Assumes your server provides a directory listing
+            if (res.ok) {
+                const html = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                fetchedTracks = [...doc.querySelectorAll('a')]
+                    .map(a => a.getAttribute('href'))
+                    .filter(href => href && href.match(/\.(mp3|ogg|wav)$/i) && !href.startsWith('http') && !href.startsWith('/')) // Basic filter
+                    .map(href => href.split('/').pop()); // Get just filename
+            }
+        } catch (e) {
+            console.warn("Could not fetch music from /music/ directory. Using hardcoded tracks if available.", e);
+        }
+        
+        tracks = fetchedTracks.length > 0 ? fetchedTracks : hardcodedTracks;
+
+        if (!tracks.length) {
+          playlistEl.innerHTML = '<li class="initial-message">No music found. Add MP3s to a "music" folder or update the script.</li>';
+          return;
+        }
+        renderPlaylist();
+      } catch (err) {
+        playlistEl.innerHTML = `<li class="error-message">Error loading music. Check console.</li>`;
+        console.error("Error in loadMusicFiles:", err);
+      }
+    }
+
+    function renderPlaylist() {
+      playlistEl.innerHTML = ''; // Clear previous items
+      tracks.forEach((track, i) => {
+        const li = document.createElement('li');
+        li.classList.add('track-item');
+        if (i === currentTrackIndex) li.classList.add('active');
+
+        // Use the raw track name from the array, as it might already be decoded
+        // If track names from server include URL encoding, you might need:
+        // const trackName = decodeURIComponent(track.replace(/\.[^/.]+$/, "")); // Remove extension
+        const trackName = track.replace(/\.[^/.]+$/, ""); // Remove extension for display
+
+        const info = document.createElement('div');
+        info.className = 'track-info';
+        info.textContent = trackName;
+        info.title = trackName; // Show full name on hover if truncated
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const favBtn = document.createElement('button');
+        favBtn.className = 'favorite-btn';
+        if (favorites.has(track)) favBtn.classList.add('favorited');
+        favBtn.innerHTML = '★';
+        favBtn.title = "Favorite";
+        favBtn.onclick = (e) => {
+          e.stopPropagation(); // Prevent track play when clicking favorite
+          toggleFavorite(track, favBtn);
+        };
+
+        actions.appendChild(favBtn);
+        li.appendChild(info);
+        li.appendChild(actions);
+        li.onclick = () => playTrack(i);
+        playlistEl.appendChild(li);
+      });
+       if (!tracks.length && playlistEl.innerHTML === '') {
+         playlistEl.innerHTML = '<li class="initial-message">No tracks to display.</li>';
+       }
+    }
+
+    function toggleFavorite(track, btnElement) {
+        if (favorites.has(track)) {
+            favorites.delete(track);
+            btnElement.classList.remove('favorited');
+        } else {
+            favorites.add(track);
+            btnElement.classList.add('favorited');
+        }
+        localStorage.setItem('favorites', JSON.stringify([...favorites]));
+    }
+
+
+    function playTrack(index) {
+      if (index < 0 || index >= tracks.length) return;
+
+      currentTrackIndex = index;
+      const track = tracks[index];
+      // const trackNameForDisplay = decodeURIComponent(track.split('/').pop().replace(/\.[^/.]+$/, ""));
+      const trackNameForDisplay = track.replace(/\.[^/.]+$/, "");
+
+
+      document.querySelectorAll('.track-item').forEach((li, i) => {
+        li.classList.toggle('active', i === index);
+      });
+
+      nowPlayingEl.textContent = trackNameForDisplay;
+      // Assumes tracks are in a 'music' subdirectory relative to the HTML file
+      audio.src = `./music/${encodeURIComponent(track)}`;
+      audio.play().catch(e => console.error("Error playing audio:", e));
+      playPauseBtn.textContent = '⏸️';
+    }
+
+    playPauseBtn.onclick = () => {
+      if (!audio.src || tracks.length === 0) {
+        if(tracks.length > 0 && currentTrackIndex === -1) {
+            playTrack(0); // Play first track if none selected
+        }
+        return;
+      }
+      if (audio.paused) {
+        audio.play().catch(e => console.error("Error playing audio:", e));
+        playPauseBtn.textContent = '⏸️';
+      } else {
+        audio.pause();
+        playPauseBtn.textContent = '▶️';
+      }
+    };
+
+    seekBar.addEventListener('input', () => {
+      if (audio.duration) {
+        audio.currentTime = (seekBar.value / 100) * audio.duration;
+      }
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        seekBar.value = (audio.currentTime / audio.duration) * 100;
+        currentTimeDisplay.textContent = formatTime(audio.currentTime);
+      } else {
+        // Reset if duration is NaN (e.g. after src change and before metadata load)
+        seekBar.value = 0;
+        currentTimeDisplay.textContent = formatTime(0);
+      }
+    });
+
+    audio.addEventListener('loadedmetadata', () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        totalDurationDisplay.textContent = formatTime(audio.duration);
+        seekBar.max = 100; // Ensure max is set
+      } else {
+         totalDurationDisplay.textContent = formatTime(0);
+      }
+    });
+
+    audio.addEventListener('ended', () => {
+      if (currentTrackIndex + 1 < tracks.length) {
+        playTrack(currentTrackIndex + 1);
+      } else {
+        // Optional: loop to first track or stop
+        // playTrack(0); // Loop
+        playPauseBtn.textContent = '▶️'; // Back to play if at end of playlist
+        currentTrackIndex = -1; // Reset index
+        nowPlayingEl.textContent = 'None';
+        // Deselect last active item visually
+        const activeItem = playlistEl.querySelector('.track-item.active');
+        if (activeItem) activeItem.classList.remove('active');
+
+      }
+    });
+    
+    audio.addEventListener('error', (e) => {
+        console.error("Audio Player Error:", audio.error, e);
+        nowPlayingEl.textContent = "Error playing track";
+        playPauseBtn.textContent = '▶️';
+        // Maybe display an error message to the user or try loading next track
+    });
+
+
+    function formatTime(time) {
+      if (isNaN(time) || time === Infinity) return "0:00";
+      const min = Math.floor(time / 60);
+      const sec = Math.floor(time % 60).toString().padStart(2, '0');
+      return `${min}:${sec}`;
+    }
+
+    // Initialize
+    loadMusicFiles();
+  </script>
+</body>
+</html>
