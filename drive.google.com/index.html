@@ -214,10 +214,10 @@
     const uploadBtn = document.getElementById("uploadBtn");
     const fileInput = document.getElementById("fileInput");
     const uploadStatus = document.getElementById("uploadStatus");
-    let GITHUB_TOKEN = "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"; // 🚨 PASTE YOUR GITHUB PERSONAL ACCESS TOKEN HERE
+    let GITHUB_TOKEN = "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"; // 🚨 PASTE YOUR GITHUB PERSONAL ACCESS TOKEN HERE (Needed for UPLOADING)
     const GITHUB_OWNER = "bigj42";
     const GITHUB_REPO = "playit";
-    const GITHUB_PATH = "drive.google.com/music";
+    const GITHUB_PATH = "drive.google.com/music"; // This is the folder path within your repository
     const GITHUB_BRANCH = "main";
 
     // Playlist UI Elements
@@ -251,63 +251,81 @@
     // --- GITHUB SONG LOADING ---
     function loadSongsFromGitHub() {
       const cacheBuster = new Date().getTime();
+      
+      // Check token for UPLOAD capabilities, not for loading songs from a public repo.
       if (!GITHUB_TOKEN) {
-          songListUL.innerHTML = `<li>GitHub token not configured. Cannot load songs. <br>Please set GITHUB_TOKEN in the script.</li>`;
-          console.warn("GitHub token not set. Song loading skipped.");
-          return;
+          uploadStatus.textContent = "GitHub token not set. Uploads disabled.";
+          // You could visually disable the upload button here too if desired:
+          // uploadBtn.disabled = true;
+          // uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+          console.warn("GitHub token not set. Song uploads will be disabled.");
+      } else {
+          uploadStatus.textContent = ""; // Clear any previous token-related messages if token is present
+          // uploadBtn.disabled = false;
+          // uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
       }
-      fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?t=${cacheBuster}`, {
-          headers: { 'Authorization': `token ${GITHUB_TOKEN}` } 
-      })
+
+      songListUL.innerHTML = '<li>Loading songs from GitHub...</li>'; // Initial loading message
+
+      // Fetching from a public repository's contents API does not require a token.
+      fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?t=${cacheBuster}`)
         .then(res => {
-            if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
+            if (!res.ok) {
+                let errorMsg = `GitHub API Error: ${res.status} ${res.statusText}.`;
+                if (res.status === 403) { // Forbidden
+                    errorMsg += " This could be due to API rate limits (try again later) or the repository/path not being public.";
+                } else if (res.status === 404) { // Not Found
+                    errorMsg += " Ensure the repository is public and the path is correct.";
+                }
+                throw new Error(errorMsg);
+            }
             return res.json();
         })
         .then(data => {
           if (Array.isArray(data)) {
-            // For demonstration: one song will have a placeholder album art URL
-            const testAlbumArtUrl = "https://via.placeholder.com/100/1E1E2F/FFFFFF?Text=Art";
-            let artAssigned = false;
-
-            songs = data.filter(file => file.name.endsWith(".mp3"))
+            songs = data.filter(file => file.name.endsWith(".mp3") && file.type === "file")
                         .map(file => {
-                            let currentArtUrl = null;
-                            if (!artAssigned && songs.length === 0) { // Assign to first song for testing
-                                // currentArtUrl = testAlbumArtUrl; // Uncomment to test with a placeholder
-                                // artAssigned = true;
-                            }
                             return { 
                                 name: file.name, 
-                                url: file.download_url, 
+                                url: file.download_url, // download_url from public repo contents API is publicly accessible
                                 id: file.sha,
-                                albumArtUrl: currentArtUrl // Will be null unless you implement logic to find art
+                                albumArtUrl: null // Album art logic remains separate
                             };
                         }); 
-            renderSongList();
+            if (songs.length === 0) {
+                songListUL.innerHTML = `<li>No MP3 files found in: <br><small class="break-all">${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_PATH}</small></li>`;
+            } else {
+                renderSongList(); // This will clear and re-populate songListUL
+            }
+          } else if (data && data.message) { // Handle GitHub API error object e.g. { message: "Not Found", ... }
+            console.error("Failed to load songs, GitHub API error:", data.message);
+            songListUL.innerHTML = `<li>Error loading songs: ${data.message}</li>`;
+            if (data.message.toLowerCase().includes("not found")) {
+                 songListUL.innerHTML += ` (Check repo/path: ${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_PATH})`;
+            }
           } else {
-            console.error("Failed to load songs, response was not an array:", data);
-            songListUL.innerHTML = `<li>Error: ${data.message || 'Could not load songs.'}</li>`;
+            console.error("Failed to load songs, response was not an array or a known error format:", data);
+            songListUL.innerHTML = `<li>Error: Could not parse song data from GitHub.</li>`;
           }
         })
         .catch(error => {
             console.error("Error fetching songs from GitHub:", error);
-            songListUL.innerHTML = `<li>Error fetching songs. ${error.message}</li>`;
-            if (error.message.includes("401")) {
-                 songListUL.innerHTML += `<li>(Ensure your GitHub token is correct and has 'repo' scope)</li>`;
-            }
+            songListUL.innerHTML = `<li>Error fetching songs: ${error.message}</li>`;
         });
     }
 
     function renderSongList() {
-      songListUL.innerHTML = "";
-      if (songs.length === 0 && !GITHUB_TOKEN) {
-          songListUL.innerHTML = `<li>Configure GitHub Token to load songs.</li>`;
-          return;
-      }
+      songListUL.innerHTML = ""; // Clear previous list or loading/error messages
+
+      // If songs array is empty at this point, loadSongsFromGitHub should have already set an appropriate message.
+      // This is a fallback or if something else cleared songListUL.
       if (songs.length === 0) {
-          songListUL.innerHTML = `<li>No MP3s found in GitHub path, or an error occurred.</li>`;
+          if (songListUL.innerHTML.trim() === "") { // Only add if no error message is already there
+            songListUL.innerHTML = `<li>No songs to display.</li>`;
+          }
           return;
       }
+
       songs.forEach((song, index) => {
         const li = document.createElement("li");
         li.className = "p-2 bg-white/10 rounded hover:bg-white/20 cursor-pointer text-sm truncate";
@@ -318,11 +336,11 @@
     }
 
     // --- PLAYER LOGIC ---
-    function playSong(songObject) { // Removed playlist context params for now, can be re-added if needed
+    function playSong(songObject) { 
         if (!songObject || !songObject.url) {
             console.error("Invalid song object for playback:", songObject);
             currentSongTitle.textContent = "Error: Invalid song";
-            albumArtImg.src = TRANSPARENT_PIXEL; // Reset art
+            albumArtImg.src = TRANSPARENT_PIXEL; 
             return;
         }
         audio.src = songObject.url;
@@ -331,21 +349,21 @@
         if (songObject.albumArtUrl) {
             albumArtImg.src = songObject.albumArtUrl;
         } else {
-            albumArtImg.src = TRANSPARENT_PIXEL; // Use transparent pixel if no art
+            albumArtImg.src = TRANSPARENT_PIXEL; 
         }
 
         audio.play();
         playPauseBtn.innerHTML = "❚❚";
         
-        const mainListIndex = songs.findIndex(s => s.id === songObject.id || s.url === songObject.url);
-        currentSongIndex = mainListIndex !== -1 ? mainListIndex : -1;
+        const mainListIndex = songs.findIndex(s => (s.id && s.id === songObject.id) || s.url === songObject.url);
+        currentSongIndex = mainListIndex !== -1 ? mainListIndex : -1; // if from playlist, might not be in main `songs` by index
         
         addToPlaylistBtn.disabled = false; 
     }
     
     function playSongFromMainList(index) {
         if (songs.length === 0 || index < 0 || index >= songs.length) return;
-        currentSongIndex = index;
+        currentSongIndex = index; // Ensure currentSongIndex is set for main list playback
         playSong(songs[currentSongIndex]);
     }
 
@@ -365,19 +383,35 @@
 
     document.getElementById("prevBtn").onclick = () => {
       if (songs.length === 0) return;
+      if (currentSongIndex === -1 && songs.length > 0) { // If playing from playlist, try to find in main list or play first
+          const currentPlayingSong = songs.find(s => s.url === audio.src);
+          if (currentPlayingSong) {
+              currentSongIndex = songs.indexOf(currentPlayingSong);
+          } else {
+              currentSongIndex = 0; // Fallback to first song
+          }
+      }
       currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
       playSongFromMainList(currentSongIndex);
     };
 
     document.getElementById("nextBtn").onclick = () => {
       if (songs.length === 0) return;
+      if (currentSongIndex === -1 && songs.length > 0) { // If playing from playlist, try to find in main list or play first
+          const currentPlayingSong = songs.find(s => s.url === audio.src);
+          if (currentPlayingSong) {
+              currentSongIndex = songs.indexOf(currentPlayingSong);
+          } else {
+              currentSongIndex = -1; // will become 0 after +1
+          }
+      }
       currentSongIndex = (currentSongIndex + 1) % songs.length;
       playSongFromMainList(currentSongIndex);
     };
     
     audio.addEventListener("ended", () => document.getElementById("nextBtn").click());
 
-    progressBar.addEventListener("input", () => { if (audio.duration) audio.currentTime = (progressBar.value / 100) * audio.duration; });
+    progressBar.addEventListener("input", () => { if (audio.duration && !isNaN(audio.duration)) audio.currentTime = (progressBar.value / 100) * audio.duration; });
     volumeControl.addEventListener("input", () => { audio.volume = volumeControl.value; });
     audio.addEventListener("timeupdate", () => {
       if (!isNaN(audio.duration) && audio.duration > 0) {
@@ -393,21 +427,25 @@
     // --- PLAYLIST MODAL LOGIC ---
     addToPlaylistBtn.onclick = () => {
         let songToAdd;
-        if (currentSongIndex !== -1 && songs[currentSongIndex]) {
+        // Prioritize currently indexed song from main list if valid
+        if (currentSongIndex !== -1 && songs[currentSongIndex] && songs[currentSongIndex].url === audio.src) {
             songToAdd = songs[currentSongIndex];
-        } else if (audio.src && currentSongTitle.textContent !== "No song playing" && currentSongTitle.textContent !== "Error: Invalid song") {
+        } 
+        // If not from main list (e.g. playlist song) or index is out of sync, reconstruct from player
+        else if (audio.src && currentSongTitle.textContent !== "No song playing" && currentSongTitle.textContent !== "Error: Invalid song") {
              songToAdd = { 
                 name: currentSongTitle.textContent, 
                 url: audio.src, 
-                id: audio.src, // Use URL as ID if no SHA
-                albumArtUrl: albumArtImg.src === TRANSPARENT_PIXEL ? null : albumArtImg.src // Capture current art
+                // Try to find ID from main songs list, otherwise use URL as ID
+                id: songs.find(s => s.url === audio.src)?.id || audio.src, 
+                albumArtUrl: albumArtImg.src === TRANSPARENT_PIXEL ? null : albumArtImg.src 
             }; 
         } else {
             alert("Cannot determine the current song to add.");
             return;
         }
         
-        songToAdd_global = { ...songToAdd }; // Shallow copy
+        songToAdd_global = { ...songToAdd }; 
 
         modalSongToAdd.textContent = `Song: ${songToAdd_global.name}`;
         populateExistingPlaylistsSelect();
@@ -454,7 +492,8 @@
     };
 
     // --- PLAYLIST MANAGEMENT LOGIC ---
-    function generatePlaylistId() { return Date.now().toString(); }
+    function generatePlaylistId() { return 'pl-' + Date.now().toString() + Math.random().toString(36).substring(2, 7); }
+
 
     function createPlaylist(name) {
         if (!name.trim()) return null;
@@ -468,16 +507,21 @@
     function addSongToPlaylist(playlistId, songObject) {
         const playlist = playlists.find(p => p.id === playlistId);
         if (playlist) {
-            if (!playlist.songs.some(s => (s.id && s.id === songObject.id) || s.url === songObject.url)) {
-                playlist.songs.push({ // Store a copy with essential fields
+            const songExists = playlist.songs.some(s => 
+                (s.id && songObject.id && s.id === songObject.id) || // Compare by ID if both exist
+                s.url === songObject.url // Fallback to URL comparison
+            );
+
+            if (!songExists) {
+                playlist.songs.push({ 
                     name: songObject.name, 
                     url: songObject.url, 
-                    id: songObject.id || songObject.url,
+                    id: songObject.id || songObject.url, // Ensure ID is present
                     albumArtUrl: songObject.albumArtUrl || null 
                 }); 
                 savePlaylistsToStorage();
                 alert(`'${songObject.name}' added to '${playlist.name}'.`);
-                renderPlaylistsList(); // Re-render to update counts and expanded views
+                renderPlaylistsList(); 
             } else {
                 alert(`'${songObject.name}' is already in '${playlist.name}'.`);
             }
@@ -487,23 +531,34 @@
     function removeSongFromPlaylist(playlistId, songIdOrUrl) {
         const playlist = playlists.find(p => p.id === playlistId);
         if (playlist) {
-            playlist.songs = playlist.songs.filter(s => s.id !== songIdOrUrl && s.url !== songIdOrUrl);
-            savePlaylistsToStorage();
-            
-            // If the playlist is currently expanded, refresh its song list
-            const playlistItemDiv = document.getElementById(`playlist-item-${playlistId}`);
-            if (playlistItemDiv && playlistItemDiv.classList.contains('expanded')) {
-                const songsContainer = playlistItemDiv.querySelector('.playlist-songs-container');
-                renderSongsForPlaylistInPlace(playlist, songsContainer);
-                 // Adjust max-height after re-render
-                songsContainer.style.maxHeight = songsContainer.scrollHeight + 'px';
+            const originalLength = playlist.songs.length;
+            playlist.songs = playlist.songs.filter(s => {
+                // Check ID first if both song.id and songIdOrUrl could be actual SHAs
+                if (s.id && typeof songIdOrUrl === 'string' && !songIdOrUrl.startsWith('http')) {
+                    return s.id !== songIdOrUrl;
+                }
+                // Fallback to URL or if songIdOrUrl is clearly a URL
+                return s.url !== songIdOrUrl;
+            });
+
+            if (playlist.songs.length < originalLength) {
+                savePlaylistsToStorage();
+                const playlistItemDiv = document.getElementById(`playlist-item-${playlistId}`);
+                if (playlistItemDiv && playlistItemDiv.classList.contains('expanded')) {
+                    const songsContainer = playlistItemDiv.querySelector('.playlist-songs-container');
+                    renderSongsForPlaylistInPlace(playlist, songsContainer);
+                    songsContainer.style.maxHeight = songsContainer.scrollHeight + 'px';
+                }
+                renderPlaylistsList(); // Update counts in the main list
             }
-            renderPlaylistsList(); // Update counts in the main list
         }
     }
 
     function deletePlaylist(playlistId) {
-        if (!confirm(`Are you sure you want to delete playlist '${playlists.find(p=>p.id===playlistId)?.name}'? This cannot be undone.`)) return;
+        const playlistToDelete = playlists.find(p=>p.id===playlistId);
+        if (!playlistToDelete) return;
+        if (!confirm(`Are you sure you want to delete playlist '${playlistToDelete.name}'? This cannot be undone.`)) return;
+        
         playlists = playlists.filter(p => p.id !== playlistId);
         savePlaylistsToStorage();
         renderPlaylistsList();
@@ -511,7 +566,7 @@
 
     // --- RENDERING PLAYLISTS UI (EXPANDABLE) ---
     function renderPlaylistsList() {
-        const oldExpandedStates = {}; // Store which playlists were expanded
+        const oldExpandedStates = {}; 
         document.querySelectorAll('.playlist-item.expanded').forEach(item => {
             oldExpandedStates[item.id.replace('playlist-item-', '')] = true;
         });
@@ -539,12 +594,12 @@
 
             const arrowSpan = document.createElement('span');
             arrowSpan.className = 'playlist-arrow mr-2';
-            arrowSpan.innerHTML = '▶'; // Right-pointing triangle
+            arrowSpan.innerHTML = '▶'; 
 
             const deleteBtn = document.createElement('button');
             deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-400 hover:text-red-300" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
             deleteBtn.title = "Delete Playlist";
-            deleteBtn.className = "p-1"; // Add some padding for easier clicking
+            deleteBtn.className = "p-1"; 
             deleteBtn.onclick = (e) => { e.stopPropagation(); deletePlaylist(pl.id); };
 
             controlsDiv.appendChild(arrowSpan);
@@ -555,7 +610,6 @@
 
             const songsContainer = document.createElement('ul');
             songsContainer.className = 'playlist-songs-container';
-            // songsContainer.id = `playlist-songs-${pl.id}`; // Not strictly needed if selecting via querySelector
 
             headerDiv.onclick = () => togglePlaylistExpansion(listItem, pl, songsContainer);
             
@@ -563,7 +617,6 @@
             listItem.appendChild(songsContainer);
             playlistsListUL.appendChild(listItem);
 
-            // Restore expanded state
             if (oldExpandedStates[pl.id]) {
                 listItem.classList.add('expanded');
                 renderSongsForPlaylistInPlace(pl, songsContainer);
@@ -579,35 +632,32 @@
             songsContainerElement.style.maxHeight = songsContainerElement.scrollHeight + 'px';
         } else {
             songsContainerElement.style.maxHeight = '0px';
-            // Consider clearing innerHTML after animation if performance becomes an issue for very long lists
-            // setTimeout(() => { if (!playlistItemElement.classList.contains('expanded')) songsContainerElement.innerHTML = ''; }, 400);
         }
     }
 
     function renderSongsForPlaylistInPlace(playlistObject, songsContainerElement) {
-        songsContainerElement.innerHTML = ""; // Clear previous songs
+        songsContainerElement.innerHTML = ""; 
         if (playlistObject.songs.length === 0) {
             const li = document.createElement('li');
-            li.className = "text-gray-400 text-xs italic px-6 py-2"; // Adjusted padding
+            li.className = "text-gray-400 text-xs italic px-6 py-2";
             li.textContent = "This playlist is empty.";
             songsContainerElement.appendChild(li);
         } else {
-            playlistObject.songs.forEach((song, index) => {
+            playlistObject.songs.forEach((song) => { // Removed index as it's not used for playback here
                 const li = document.createElement('li');
-                // Tailwind class for truncation applied via playlist-song-name span
                 
                 const songNameSpan = document.createElement('span');
                 songNameSpan.className = "playlist-song-name";
                 songNameSpan.textContent = song.name;
                 songNameSpan.onclick = (e) => { 
-                    e.stopPropagation(); // Prevent playlist header click
-                    playSong(song); 
+                    e.stopPropagation(); 
+                    playSong(song); // Play the specific song object from the playlist
                 };
                 
                 const removeSongBtn = document.createElement('button');
                 removeSongBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-red-400 hover:text-red-300" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
                 removeSongBtn.title = "Remove from playlist";
-                removeSongBtn.className = "p-1"; // Add some padding
+                removeSongBtn.className = "p-1"; 
                 removeSongBtn.onclick = (e) => { 
                     e.stopPropagation(); 
                     removeSongFromPlaylist(playlistObject.id, song.id || song.url); 
@@ -646,10 +696,12 @@
     uploadBtn.onclick = () => {
       if (!GITHUB_TOKEN) {
           uploadStatus.textContent = "GitHub token not configured. Cannot upload.";
+          // Optionally, you could also `alert("GitHub token not configured. Cannot upload.");`
           return;
       }
       fileInput.click();
     };
+
     fileInput.onchange = async (event) => {
       const file = event.target.files[0];
       if (file) {
@@ -658,65 +710,84 @@
             fileInput.value = ""; return;
         }
         await uploadFileToGitHub(file);
-        fileInput.value = "";
+        fileInput.value = ""; // Reset file input
       }
     };
+
     async function uploadFileToGitHub(file) { 
-        if (!GITHUB_TOKEN) {
+        if (!GITHUB_TOKEN) { // Double check, though uploadBtn.onclick should prevent this
           uploadStatus.textContent = "GitHub Token not set! Cannot upload."; return;
         }
         uploadStatus.textContent = `Uploading ${file.name}...`;
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const content = e.target.result.split(',')[1];
-            const filePath = `${GITHUB_PATH}/${file.name}`;
+            const content = e.target.result.split(',')[1]; // Base64 content
+            const filePath = `${GITHUB_PATH}/${file.name}`; // Ensure GITHUB_PATH doesn't have leading/trailing slashes if file.name does
             const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`;
             
-            // Check if file exists to get SHA (for updates)
             let sha = null;
-            try {
+            try { // Check if file exists to get SHA (for updates)
                 const existingFileRes = await fetch(url, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` }});
                 if (existingFileRes.ok) {
                     const existingFile = await existingFileRes.json();
                     sha = existingFile.sha;
+                } else if (existingFileRes.status !== 404) { // Don't error for 404 (file not found)
+                    console.warn(`Could not fetch existing file info (status ${existingFileRes.status}), proceeding without SHA.`);
                 }
-            } catch (err) { /* Silently ignore, means file likely doesn't exist */ }
+            } catch (err) { 
+                console.warn("Error checking for existing file (might be network issue):", err);
+            }
 
             const body = { 
                 message: `feat: ${sha ? 'update' : 'add'} song '${file.name}'`, 
                 content: content, 
                 branch: GITHUB_BRANCH,
-                ...(sha && { sha: sha }) // Add SHA if updating
+                ...(sha && { sha: sha }) // Add SHA only if we have one (for updating existing file)
             };
 
             try {
                 const response = await fetch(url, {
                     method: 'PUT',
-                    headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
+                    headers: { 
+                        'Authorization': `token ${GITHUB_TOKEN}`, 
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json' // Important for JSON body
+                    },
                     body: JSON.stringify(body),
                 });
                 const result = await response.json();
                 if (response.ok) {
                     uploadStatus.textContent = `${file.name} ${sha ? 'updated' : 'uploaded'}! Refreshing...`;
-                    setTimeout(() => { loadSongsFromGitHub(); uploadStatus.textContent = ""; }, 2000);
+                    setTimeout(() => { 
+                        loadSongsFromGitHub(); // Refresh song list
+                        uploadStatus.textContent = ""; 
+                    }, 2000);
                 } else {
                     uploadStatus.textContent = `Error: ${result.message || response.statusText}`;
-                    if (response.status === 401) uploadStatus.textContent += " (Token invalid/expired or insufficient permissions?)";
-                    if (response.status === 409) uploadStatus.textContent += " (Conflict - try again or refresh song list)";
-                     if (response.status === 422 && result.message.includes("sha")) uploadStatus.textContent += " (File changed on server, try re-uploading)";
+                    if (response.status === 401) uploadStatus.textContent += " (Token invalid/expired or no repo write access?)";
+                    if (response.status === 409) uploadStatus.textContent += " (Conflict - try again or refresh song list if SHA mismatch)";
+                    if (response.status === 422 && result.message && result.message.includes("sha")) uploadStatus.textContent += " (File changed on server. Refresh list & re-upload)";
+                    console.error("GitHub Upload Error:", result);
                 }
-            } catch (error) { uploadStatus.textContent = `Network error: ${error.message}`; }
+            } catch (error) { 
+                uploadStatus.textContent = `Network error during upload: ${error.message}`; 
+                console.error("Network error during upload:", error);
+            }
+        };
+        reader.onerror = (error) => {
+            uploadStatus.textContent = 'Error reading file.';
+            console.error('FileReader error:', error);
         };
         reader.readAsDataURL(file);
     }
 
     // --- INITIALIZATION ---
     function initializeApp() {
-        albumArtImg.src = TRANSPARENT_PIXEL; // Set to transparent initially
-        loadSongsFromGitHub();
+        albumArtImg.src = TRANSPARENT_PIXEL; 
+        loadSongsFromGitHub(); // Will attempt to load songs (token not needed for this step if repo public)
         loadPlaylistsFromStorage();
         renderPlaylistsList();
-        addToPlaylistBtn.disabled = true; 
+        addToPlaylistBtn.disabled = true; // Disabled until a song is playing
     }
 
     initializeApp();
